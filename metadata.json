@@ -1,0 +1,6 @@
+{
+  "name": "CHIOMA AI AGENT",
+  "description": "Unlimited Free Terminal Intelligence via Termux MCP",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
