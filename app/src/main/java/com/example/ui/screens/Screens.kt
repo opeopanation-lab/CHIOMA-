@@ -29,6 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.Manifest
 import com.example.data.ChatMessage
 import com.example.data.CustomCommand
 import com.example.services.ChiomaServerAssets
@@ -591,6 +596,50 @@ fun ChatScreen(viewModel: ChiomaViewModel) {
     val scrollState = rememberScrollState()
     var inputQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var isListening by remember { mutableStateOf(false) }
+    var listeningError by remember { mutableStateOf<String?>(null) }
+
+    val speechHelper = remember {
+        com.example.services.SpeechRecognizerHelper(
+            context = context,
+            onResults = { result ->
+                inputQuery = result
+                isListening = false
+                listeningError = null
+                Toast.makeText(context, "Heard: \"$result\"", Toast.LENGTH_SHORT).show()
+            },
+            onPartialResults = { partial ->
+                inputQuery = partial
+            },
+            onError = { err ->
+                isListening = false
+                listeningError = err
+                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+            },
+            onListeningStateChange = { state ->
+                isListening = state
+            }
+        )
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            speechHelper.destroy()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            isListening = true
+            speechHelper.startListening()
+        } else {
+            Toast.makeText(context, "Microphone permission is required for Voice input.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     FrostedGlassBackground {
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -753,7 +802,7 @@ fun ChatScreen(viewModel: ChiomaViewModel) {
                 OutlinedTextField(
                     value = inputQuery,
                     onValueChange = { inputQuery = it },
-                    placeholder = { Text("Ask Chioma anything...", color = TextSecondary.copy(alpha = 0.6f), fontSize = 14.sp) },
+                    placeholder = { Text(if (isListening) "Listening carefully..." else "Ask Chioma anything...", color = TextSecondary.copy(alpha = 0.6f), fontSize = 14.sp) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ElectricCyan,
                         unfocusedBorderColor = Color(0x1BFFFFFF),
@@ -766,7 +815,46 @@ fun ChatScreen(viewModel: ChiomaViewModel) {
                     shape = RoundedCornerShape(24.dp)
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = {
+                        if (isListening) {
+                            speechHelper.stopListening()
+                        } else {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (hasPermission) {
+                                isListening = true
+                                speechHelper.startListening()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            if (isListening) Color(0x3300E5FF) else Color(0x0DFFFFFF),
+                            CircleShape
+                        )
+                        .border(
+                            1.dp,
+                            if (isListening) ElectricCyan else Color(0x1BFFFFFF),
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = "Voice command input",
+                        tint = if (isListening) ElectricCyan else Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
